@@ -51,7 +51,7 @@ type TreeNode struct {
 	RecipeStep *RecipeStep
 }
 
-func findOptimalCraftingPath(target string, graph map[string][][2]string) ([]RecipeStep, *TreeNode) {
+func findOptimalCraftingPathBfs(target string, graph map[string][][2]string) ([]RecipeStep, *TreeNode) {
 	craftable := make(map[string]bool)
 	for base := range baseElements {
 		craftable[base] = true
@@ -63,9 +63,7 @@ func findOptimalCraftingPath(target string, graph map[string][][2]string) ([]Rec
 	}
 
 	recipeFor := make(map[string]RecipeStep)
-
 	dependencies := make(map[string][]string)
-
 	queue := []string{}
 
 	for result, recipes := range graph {
@@ -147,6 +145,84 @@ func findOptimalCraftingPath(target string, graph map[string][][2]string) ([]Rec
 	return finalPath, treeRoot
 }
 
+func findOptimalCraftingPathDfs(target string, graph map[string][][2]string) ([]RecipeStep, *TreeNode) {
+	memo := make(map[string]int)
+
+	for element := range baseElements {
+		memo[element] = 1
+	}
+
+	recipeFor := make(map[string]RecipeStep)
+	dependencies := make(map[string][]string)
+
+	var canCraft func(element string, depth int) bool
+	canCraft = func(element string, depth int) bool {
+		if result, exists := memo[element]; exists {
+			return result == 1
+		}
+
+		memo[element] = -1
+
+		recipes, exists := graph[element]
+		if !exists {
+			return false
+		}
+
+		for _, recipe := range recipes {
+			ing1, ing2 := recipe[0], recipe[1]
+
+			if canCraft(ing1, depth+1) && canCraft(ing2, depth+1) {
+				recipeFor[element] = RecipeStep{
+					Ingredient1: ing1,
+					Ingredient2: ing2,
+					Result:      element,
+				}
+
+				// Add dependency information for consistency with BFS implementation
+				dependencies[element] = []string{ing1, ing2}
+
+				memo[element] = 1
+				return true
+			}
+		}
+
+		memo[element] = -1
+		return false
+	}
+
+	if !canCraft(target, 0) {
+		fmt.Printf("Cannot craft %s from base elements\n", target)
+		return nil, nil
+	}
+
+	var craftingPath []RecipeStep
+	processed := make(map[string]bool)
+
+	var addToPath func(element string)
+	addToPath = func(element string) {
+		if baseElements[element] || processed[element] {
+			return
+		}
+
+		recipe, exists := recipeFor[element]
+		if !exists {
+			return
+		}
+
+		addToPath(recipe.Ingredient1)
+		addToPath(recipe.Ingredient2)
+
+		craftingPath = append(craftingPath, recipe)
+		processed[element] = true
+	}
+
+	addToPath(target)
+
+	treeRoot := buildCraftingTree(target, recipeFor, dependencies)
+
+	return craftingPath, treeRoot
+}
+
 func buildCraftingTree(target string, recipeFor map[string]RecipeStep, dependencies map[string][]string) *TreeNode {
 	if baseElements[target] {
 		return &TreeNode{
@@ -210,13 +286,11 @@ func printTreeAsHeap(root *TreeNode, prefix string, isLast bool) {
 	}
 }
 
-
-
 // func main() {
 // 	graph := loadRecipes("recipes.json")
 
 // 	target := "Light"
-// 	path, tree := findOptimalCraftingPath(target, graph)
+// 	path, tree := findOptimalCraftingPathBfs(target, graph)
 // 	printCraftingPath(path)
 
 // 	fmt.Println("\nCrafting Tree (Nested View):")
