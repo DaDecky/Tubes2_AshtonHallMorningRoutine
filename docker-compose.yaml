@@ -21,5 +21,5 @@ services:
     volumes:
       - ./src/backend:/app
     environment:
-      - BACKEND_PORT: 8081
+      BACKEND_PORT: "8081"
 
