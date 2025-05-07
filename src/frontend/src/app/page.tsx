@@ -1,103 +1,98 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import Link from "next/link";
+import React, { useState } from "react";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+
+export enum Mode {
+  SHORTEST = "Shortest",
+  MULTI = "Multi",
+}
+export enum Algorithm {
+  BFS = "BFS",
+  DFS = "DFS",
+}
+
+const Page = () => {
+  const [mode, setMode] = useState<Mode>(Mode.SHORTEST);
+  const [algorithm, setAlgorithm] = useState<Algorithm>(Algorithm.BFS);
+  const [maxRecipe, setMaxRecipe] = useState<number>(-1);
+
+  const handleQuery = async () => {
+    const response = await fetch(
+      `/api/query?algo=${algorithm}&mode=${mode}&max=${maxRecipe}`
+    );
+
+    const data = await response.json();
+    console.log("Query response:", data);
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="flex flex-col items-center  min-h-screen bg-gray-100">
+      <Link
+        className="bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-700"
+        href={"/dummy"}
+      >
+        Dummy Live Update Graph
+      </Link>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+      <div>
+        <div>Choose Algorithm: </div>
+        <RadioGroup className="flex" defaultValue={algorithm as string}>
+          {Object.values(Algorithm).map((algo) => (
+            <div className="flex items-center space-x-2" key={algo}>
+              <RadioGroupItem
+                value={algo}
+                id={algo}
+                onClick={() => setAlgorithm(algo)}
+              />
+              <Label htmlFor={algo}>{algo}</Label>
+            </div>
+          ))}
+        </RadioGroup>
+
+        <div>Choose Mode : </div>
+        <RadioGroup className="flex" defaultValue={mode as string}>
+          {Object.values(Mode).map((mode) => (
+            <div className="flex items-center space-x-2" key={mode}>
+              <RadioGroupItem
+                value={mode}
+                id={mode}
+                onClick={() => setMode(mode)}
+              />
+              <Label htmlFor={mode}>{mode}</Label>
+            </div>
+          ))}
+        </RadioGroup>
+
+        {mode === Mode.MULTI && (
+          <div>
+            <label htmlFor="max-recipe">Max Recipe: </label>
+            <input
+              type="number"
+              id="max-recipe"
+              value={maxRecipe}
+              onChange={(e) => setMaxRecipe(Number(e.target.value))}
+              className="border border-gray-300 rounded p-2"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          </div>
+        )}
+      </div>
+
+      <button
+        className="bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 mt-4 hover:cursor-pointer"
+        onClick={handleQuery}
+      >
+        Query Result
+      </button>
+      <p className="mt-4">Current mode: {mode}</p>
+      <p className="mt-4">Current algorithm: {algorithm}</p>
+      <p className="mt-4">
+        {mode === Mode.MULTI ? `Max Recipe: ${maxRecipe}` : ""}
+      </p>
     </div>
   );
-}
+};
+
+export default Page;
