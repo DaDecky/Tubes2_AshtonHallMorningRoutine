@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 )
 
 type Recipe struct {
@@ -51,137 +52,55 @@ type TreeNode struct {
 	RecipeStep *RecipeStep
 }
 
+func findRecipes(ing1, ing2 string, graph map[string][][2]string) []string {
+	var results []string
+
+	for result, recipes := range graph {
+		for _, recipe := range recipes {
+			// Check both combinations: (ing1, ing2) and (ing2, ing1)
+			if (recipe[0] == ing1 && recipe[1] == ing2) ||
+				(recipe[0] == ing2 && recipe[1] == ing1) {
+				results = append(results, result)
+			}
+		}
+	}
+
+	return results
+}
+
 func BFS(target string, graph map[string][][2]string) ([]RecipeStep, *TreeNode) {
 	craftable := make(map[string]bool)
+	recipeFor := make(map[string]RecipeStep)
+
 	for base := range baseElements {
 		craftable[base] = true
 	}
 
-	usedInPath := make(map[string]bool)
-	for base := range baseElements {
-		usedInPath[base] = true
-	}
-
-	recipeFor := make(map[string]RecipeStep)
-	dependencies := make(map[string][]string)
 	queue := []string{}
 
-	for result, recipes := range graph {
-		for _, recipe := range recipes {
-			ing1, ing2 := recipe[0], recipe[1]
-			if baseElements[ing1] && baseElements[ing2] {
-				craftable[result] = true
-				step := RecipeStep{
-					Ingredient1: ing1,
-					Ingredient2: ing2,
-					Result:      result,
-				}
-				recipeFor[result] = step
-				dependencies[result] = []string{ing1, ing2}
-				queue = append(queue, result)
-			}
-		}
+	for base := range baseElements {
+		queue = append(queue, base)
 	}
 
 	for len(queue) > 0 {
+		current := queue[0]
 		queue = queue[1:]
 
-		for result, recipes := range graph {
-			if craftable[result] {
-				continue
-			}
+		for ingredient := range craftable {
+			possibleCombinations := findRecipes(current, ingredient, graph)
 
-			for _, recipe := range recipes {
-				ing1, ing2 := recipe[0], recipe[1]
-
-				// If we can craft both ingredients
-				if craftable[ing1] && craftable[ing2] {
+			for _, result := range possibleCombinations {
+				if !craftable[result] {
 					craftable[result] = true
-
-					step := RecipeStep{
-						Ingredient1: ing1,
-						Ingredient2: ing2,
-						Result:      result,
-					}
-
-					recipeFor[result] = step
-					dependencies[result] = []string{ing1, ing2}
 					queue = append(queue, result)
 
-					if result == target {
-						break
-					}
-				}
-			}
-		}
-	}
-
-	if !craftable[target] {
-		fmt.Printf("Cannot craft %s from base elements\n", target)
-		return nil, nil
-	}
-
-	var finalPath []RecipeStep
-
-	var addRecipesToPath func(item string)
-	addRecipesToPath = func(item string) {
-		if baseElements[item] || usedInPath[item] {
-			return
-		}
-
-		deps := dependencies[item]
-		for _, dep := range deps {
-			addRecipesToPath(dep)
-		}
-
-		finalPath = append(finalPath, recipeFor[item])
-		usedInPath[item] = true
-	}
-
-	addRecipesToPath(target)
-
-	treeRoot := buildCraftingTree(target, recipeFor, dependencies)
-
-	return finalPath, treeRoot
-}
-
-func DFS(target string, graph map[string][][2]string) ([]RecipeStep, *TreeNode) {
-	// Initialize the maps
-	bestRecipe := make(map[string]RecipeStep)
-	craftable := make(map[string]bool)
-
-	for element := range baseElements {
-		craftable[element] = true
-	}
-
-	for {
-		newElementFound := false
-
-		// Try to craft each element
-		for result, recipes := range graph {
-			if craftable[result] {
-				continue
-			}
-
-			for _, recipe := range recipes {
-				ing1, ing2 := recipe[0], recipe[1]
-				// fmt.Printf("Checking recipe: %s %s -> %s\n", ing1, ing2, result)
-
-				if craftable[ing1] && craftable[ing2] {
-					craftable[result] = true
-					bestRecipe[result] = RecipeStep{
-						Ingredient1: ing1,
-						Ingredient2: ing2,
+					recipeFor[result] = RecipeStep{
+						Ingredient1: current,
+						Ingredient2: ingredient,
 						Result:      result,
 					}
-					newElementFound = true
-					break
 				}
 			}
-		}
-
-		if !newElementFound {
-			break
 		}
 	}
 
@@ -193,41 +112,178 @@ func DFS(target string, graph map[string][][2]string) ([]RecipeStep, *TreeNode) 
 	var craftingPath []RecipeStep
 	visited := make(map[string]bool)
 
-	type StackItem struct {
-		Element    string
-		NeedsVisit bool
-	}
+	pathQueue := []string{target}
+	levelMap := make(map[string]int)
+	levelMap[target] = 0
 
-	stack := []StackItem{{Element: target, NeedsVisit: true}}
+	for len(pathQueue) > 0 {
+		current := pathQueue[0]
+		pathQueue = pathQueue[1:]
 
-	for len(stack) > 0 {
-		current := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-
-		if baseElements[current.Element] || visited[current.Element] {
+		if baseElements[current] || visited[current] {
 			continue
 		}
 
-		if current.NeedsVisit {
-			stack = append(stack, StackItem{Element: current.Element, NeedsVisit: false})
+		recipe, exists := recipeFor[current]
+		if !exists {
+			continue
+		}
 
-			recipe, exists := bestRecipe[current.Element]
-			if exists {
-				stack = append(stack, StackItem{Element: recipe.Ingredient2, NeedsVisit: true})
-				stack = append(stack, StackItem{Element: recipe.Ingredient1, NeedsVisit: true})
-			}
-		} else {
-			recipe, exists := bestRecipe[current.Element]
-			if exists {
-				craftingPath = append(craftingPath, recipe)
-				visited[current.Element] = true
+		visited[current] = true
+
+		ing1, ing2 := recipe.Ingredient1, recipe.Ingredient2
+
+		if !baseElements[ing1] && !visited[ing1] {
+			pathQueue = append(pathQueue, ing1)
+			levelMap[ing1] = levelMap[current] + 1
+		}
+
+		if !baseElements[ing2] && !visited[ing2] {
+			pathQueue = append(pathQueue, ing2)
+			levelMap[ing2] = levelMap[current] + 1
+		}
+	}
+
+	type ElementLevel struct {
+		Element string
+		Level   int
+	}
+
+	var elementsByLevel []ElementLevel
+	for element := range visited {
+		elementsByLevel = append(elementsByLevel, ElementLevel{
+			Element: element,
+			Level:   levelMap[element],
+		})
+	}
+
+	sort.Slice(elementsByLevel, func(i, j int) bool {
+		return elementsByLevel[i].Level > elementsByLevel[j].Level
+	})
+
+	visitedForPath := make(map[string]bool)
+	for _, el := range elementsByLevel {
+		element := el.Element
+		if !visitedForPath[element] {
+			recipe := recipeFor[element]
+			craftingPath = append(craftingPath, recipe)
+			visitedForPath[element] = true
+		}
+	}
+
+	treeRoot := buildCraftingTree(target, recipeFor, make(map[string][]string))
+
+	return craftingPath, treeRoot
+}
+
+func DFS(target string, graph map[string][][2]string) ([]RecipeStep, *TreeNode) {
+	craftable := make(map[string]bool)
+	recipeFor := make(map[string]RecipeStep)
+
+	for base := range baseElements {
+		craftable[base] = true
+	}
+
+	visited := make(map[string]bool)
+	stack := []string{}
+
+	for base := range baseElements {
+		stack = append(stack, base)
+	}
+
+	for len(stack) > 0 {
+		lastIdx := len(stack) - 1
+		current := stack[lastIdx]
+		stack = stack[:lastIdx]
+
+		if visited[current] {
+			continue
+		}
+
+		visited[current] = true
+
+		for ingredient := range craftable {
+			possibleResults := findRecipes(current, ingredient, graph)
+
+			for _, result := range possibleResults {
+				if !craftable[result] {
+					craftable[result] = true
+					stack = append(stack, result)
+
+					recipeFor[result] = RecipeStep{
+						Ingredient1: current,
+						Ingredient2: ingredient,
+						Result:      result,
+					}
+				}
 			}
 		}
 	}
 
-	treeRoot := buildCraftingTreeDFS(target, bestRecipe)
+	if !craftable[target] {
+		fmt.Printf("Cannot craft %s from base elements\n", target)
+		return nil, nil
+	}
+
+	var craftingPath []RecipeStep
+	visitedPath := make(map[string]bool)
+
+	depthMap := make(map[string]int)
+
+	explorePathDFS(target, recipeFor, visitedPath, depthMap, 0)
+
+	type ElementDepth struct {
+		Element string
+		Depth   int
+	}
+
+	var elementsByDepth []ElementDepth
+	for element := range visitedPath {
+		if element != target && !baseElements[element] {
+			elementsByDepth = append(elementsByDepth, ElementDepth{
+				Element: element,
+				Depth:   depthMap[element],
+			})
+		}
+	}
+
+	sort.Slice(elementsByDepth, func(i, j int) bool {
+		return elementsByDepth[i].Depth > elementsByDepth[j].Depth
+	})
+
+	for _, el := range elementsByDepth {
+		element := el.Element
+		recipe := recipeFor[element]
+		craftingPath = append(craftingPath, recipe)
+	}
+
+	if !baseElements[target] {
+		craftingPath = append(craftingPath, recipeFor[target])
+	}
+
+	treeRoot := buildCraftingTreeDFS(target, recipeFor)
 
 	return craftingPath, treeRoot
+}
+
+func explorePathDFS(element string, recipeFor map[string]RecipeStep, visited map[string]bool, depthMap map[string]int, depth int) {
+	if visited[element] || baseElements[element] {
+		return
+	}
+
+	visited[element] = true
+
+	depthMap[element] = depth
+
+	recipe, exists := recipeFor[element]
+	if !exists {
+		return
+	}
+
+	ing1, ing2 := recipe.Ingredient1, recipe.Ingredient2
+
+	explorePathDFS(ing1, recipeFor, visited, depthMap, depth+1)
+	explorePathDFS(ing2, recipeFor, visited, depthMap, depth+1)
 }
 
 func buildCraftingTree(target string, recipeFor map[string]RecipeStep, dependencies map[string][]string) *TreeNode {
@@ -292,18 +348,6 @@ func buildCraftingTreeDFS(element string, bestRecipe map[string]RecipeStep) *Tre
 	return node
 }
 
-func printCraftingPath(steps []RecipeStep) {
-	if steps == nil || len(steps) == 0 {
-		fmt.Println("No valid crafting path found.")
-		return
-	}
-
-	fmt.Println("\nOptimized Crafting Path:")
-	for i, step := range steps {
-		fmt.Printf("Step %d: %s + %s = %s\n", i+1, step.Ingredient1, step.Ingredient2, step.Result)
-	}
-}
-
 func printTreeAsHeap(root *TreeNode, prefix string, isLast bool) {
 	if root == nil {
 		return
@@ -334,14 +378,8 @@ func printTreeAsHeap(root *TreeNode, prefix string, isLast bool) {
 // 	graph := loadRecipes("recipes.json")
 
 // 	target := "Mailbox"
-// 	_, tree := BFS(target, graph)
-// 	// printCraftingPath(path)
+// 	_, tree := DFS(target, graph)
 
-// 	// fmt.Println("\nCrafting Tree (Nested View):")
 // 	printTreeAsHeap(tree, "", true)
 
-// 	// _, tree = DFS(target, graph)
-
-// 	// fmt.Println("\nCrafting Tree (Nested View):")
-// 	// printTreeAsHeap(tree, "", true)
 // }
