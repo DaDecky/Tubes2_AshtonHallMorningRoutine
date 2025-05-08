@@ -51,7 +51,7 @@ type TreeNode struct {
 	RecipeStep *RecipeStep
 }
 
-func findOptimalCraftingPathBfs(target string, graph map[string][][2]string) ([]RecipeStep, *TreeNode) {
+func BFS(target string, graph map[string][][2]string) ([]RecipeStep, *TreeNode) {
 	craftable := make(map[string]bool)
 	for base := range baseElements {
 		craftable[base] = true
@@ -145,75 +145,85 @@ func findOptimalCraftingPathBfs(target string, graph map[string][][2]string) ([]
 	return finalPath, treeRoot
 }
 
-func findOptimalCraftingPathDfs(target string, graph map[string][][2]string) ([]RecipeStep, *TreeNode) {
+func DFS(target string, graph map[string][][2]string) ([]RecipeStep, *TreeNode) {
+	// Initialize the maps
 	bestRecipe := make(map[string]RecipeStep)
-	memo := make(map[string]bool)
+	craftable := make(map[string]bool)
 
-	var canCraft func(element string) bool
-	canCraft = func(element string) bool {
-		if result, exists := memo[element]; exists {
-			return result
-		}
+	for element := range baseElements {
+		craftable[element] = true
+	}
 
-		if baseElements[element] {
-			memo[element] = true
-			return true
-		}
+	for {
+		newElementFound := false
 
-		recipes, exists := graph[element]
-		if !exists {
-			baseElements[element] = true
-			memo[element] = true
-			return true
-		}
+		// Try to craft each element
+		for result, recipes := range graph {
+			if craftable[result] {
+				continue
+			}
 
-		memo[element] = false
+			for _, recipe := range recipes {
+				ing1, ing2 := recipe[0], recipe[1]
+				// fmt.Printf("Checking recipe: %s %s -> %s\n", ing1, ing2, result)
 
-		for _, recipe := range recipes {
-			ing1, ing2 := recipe[0], recipe[1]
-
-			if canCraft(ing1) && canCraft(ing2) {
-				step := RecipeStep{
-					Ingredient1: ing1,
-					Ingredient2: ing2,
-					Result:      element,
+				if craftable[ing1] && craftable[ing2] {
+					craftable[result] = true
+					bestRecipe[result] = RecipeStep{
+						Ingredient1: ing1,
+						Ingredient2: ing2,
+						Result:      result,
+					}
+					newElementFound = true
+					break
 				}
-
-				bestRecipe[element] = step
-				memo[element] = true
-				return true
 			}
 		}
 
-		baseElements[element] = true
-		memo[element] = true
-		return true
+		if !newElementFound {
+			break
+		}
 	}
 
-	canCraft(target)
+	if !craftable[target] {
+		fmt.Printf("Cannot craft %s from base elements\n", target)
+		return nil, nil
+	}
 
 	var craftingPath []RecipeStep
-	processed := make(map[string]bool)
+	visited := make(map[string]bool)
 
-	var buildPath func(element string)
-	buildPath = func(element string) {
-		if baseElements[element] || processed[element] {
-			return
-		}
-
-		recipe, exists := bestRecipe[element]
-		if !exists {
-			return
-		}
-
-		buildPath(recipe.Ingredient1)
-		buildPath(recipe.Ingredient2)
-
-		craftingPath = append(craftingPath, recipe)
-		processed[element] = true
+	type StackItem struct {
+		Element    string
+		NeedsVisit bool
 	}
 
-	buildPath(target)
+	stack := []StackItem{{Element: target, NeedsVisit: true}}
+
+	for len(stack) > 0 {
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if baseElements[current.Element] || visited[current.Element] {
+			continue
+		}
+
+		if current.NeedsVisit {
+			stack = append(stack, StackItem{Element: current.Element, NeedsVisit: false})
+
+			recipe, exists := bestRecipe[current.Element]
+			if exists {
+				stack = append(stack, StackItem{Element: recipe.Ingredient2, NeedsVisit: true})
+				stack = append(stack, StackItem{Element: recipe.Ingredient1, NeedsVisit: true})
+			}
+		} else {
+			recipe, exists := bestRecipe[current.Element]
+			if exists {
+				craftingPath = append(craftingPath, recipe)
+				visited[current.Element] = true
+			}
+		}
+	}
 
 	treeRoot := buildCraftingTreeDFS(target, bestRecipe)
 
@@ -323,16 +333,15 @@ func printTreeAsHeap(root *TreeNode, prefix string, isLast bool) {
 // func main() {
 // 	graph := loadRecipes("recipes.json")
 
-// 	target := "Seaweed"
-// 	path, tree := findOptimalCraftingPathBfs(target, graph)
-// 	printCraftingPath(path)
+// 	target := "Mailbox"
+// 	_, tree := BFS(target, graph)
+// 	// printCraftingPath(path)
 
-// 	fmt.Println("\nCrafting Tree (Nested View):")
+// 	// fmt.Println("\nCrafting Tree (Nested View):")
 // 	printTreeAsHeap(tree, "", true)
 
-// 	path, tree = findOptimalCraftingPathDfs(target, graph)
-// 	printCraftingPath(path)
+// 	// _, tree = DFS(target, graph)
 
-// 	fmt.Println("\nCrafting Tree (Nested View):")
-// 	printTreeAsHeap(tree, "", true)
+// 	// fmt.Println("\nCrafting Tree (Nested View):")
+// 	// printTreeAsHeap(tree, "", true)
 // }
