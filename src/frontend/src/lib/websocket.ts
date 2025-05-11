@@ -5,6 +5,7 @@ export const useWebsocket = () => {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<'idle' | 'connecting' | 'running' | 'complete' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [result, setResult] = useState<any>(null);
 
   const connect = useCallback(async (params: Record<string, string> = {}) => {
@@ -54,6 +55,7 @@ export const useWebsocket = () => {
 
             setSocket(ws);
         } 
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         catch (err) {
                 setError('Failed to establish connection');
                 setStatus('error');
