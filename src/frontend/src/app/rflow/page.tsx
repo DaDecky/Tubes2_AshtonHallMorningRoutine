@@ -1,10 +1,12 @@
 "use client";
 import dynamic from "next/dynamic";
 
-const BrickFlow = dynamic(() => import("@/components/BrickFlow"), {
+const RecipeTree = dynamic(() => import("@/components/RecipeTree"), {
   ssr: false,
 });
+// import { data } from "@/testing/sheet_music_recipes";
+import { data } from "@/testing/brick";
 
 export default function Page() {
-  return <BrickFlow />;
+  return <RecipeTree data={data} />;
 }
