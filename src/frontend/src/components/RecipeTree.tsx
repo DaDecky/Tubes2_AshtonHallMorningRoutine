@@ -19,7 +19,7 @@ type RecipeNode = {
 };
 
 type recipeTreeProps = {
-  data: RecipeNode;
+  data: RecipeNode | undefined;
   direction?: "TB" | "LR"; // Top-to-Bottom or Left-to-Right layout
   useImage?: boolean;
 };
@@ -128,13 +128,24 @@ export default function recipeTree({
   data,
   direction = "TB",
 }: recipeTreeProps) {
+  if (!data) {
+    return (
+      <div style={{ width: "100%", height: "100%" }}>
+        <ReactFlow fitView defaultEdgeOptions={{ style: { strokeWidth: 2 } }}>
+          <Background />
+          <Controls />
+          <MiniMap />
+        </ReactFlow>
+      </div>
+    );
+  }
   const { nodes: layoutedNodes, edges: layoutedEdges } = generateGraphElements(
     data,
     direction
   );
 
   return (
-    <div style={{ width: "100%", height: "100vh" }}>
+    <div style={{ width: "100%", height: "100%" }}>
       <ReactFlow
         nodes={layoutedNodes}
         edges={layoutedEdges}
