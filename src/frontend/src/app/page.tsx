@@ -1,6 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useReducer, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,17 +35,6 @@ const RecipeTree = dynamic(() => import("@/components/RecipeTree"), {
     </div>
   ),
 });
-
-const RECIPE_OPTIONS = [
-  { value: "brick", label: "Brick" },
-  { value: "wood", label: "Wood" },
-  { value: "steel", label: "Steel" },
-  { value: "glass", label: "Glass" },
-  { value: "plastic", label: "Plastic" },
-  { value: "concrete", label: "Concrete" },
-  { value: "ceramic", label: "Ceramic" },
-  { value: "aluminum", label: "Aluminum" },
-];
 
 type RecipeNode = {
   name: string;
@@ -101,6 +90,11 @@ function reducer(state: State, action: Action): State {
   }
 }
 
+type RecipeOption = {
+  tier: number;
+  name: string;
+};
+
 export default function Page() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [target, setTarget] = useState<string>("");
@@ -109,9 +103,28 @@ export default function Page() {
   const [maxRecipes, setMaxRecipes] = useState(1);
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
+  const [recipeOptions, setRecipeOptions] = useState<RecipeOption[]>();
 
-  const filteredOptions = RECIPE_OPTIONS.filter((option) =>
-    option.label.toLowerCase().includes(searchValue.toLowerCase())
+  useEffect(() => {
+    const fetchRecipeOptions = async () => {
+      try {
+        const response = await fetch("/api/testing-recipe-option");
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const jsonData = await response.json();
+        setRecipeOptions(jsonData);
+      } catch (error) {
+        console.error(
+          error instanceof Error ? error.message : "Unknown error occurred"
+        );
+      }
+    };
+    fetchRecipeOptions();
+  }, []);
+
+  const filteredOptions = recipeOptions?.filter((option) =>
+    option.name.toLowerCase().includes(searchValue.toLowerCase())
   );
 
   const fetchData = async (
@@ -165,9 +178,9 @@ export default function Page() {
     fetchData(target, algorithm, shortestPath);
   };
 
-  const selectedLabel = RECIPE_OPTIONS.find(
-    (option) => option.value === target
-  )?.label;
+  const targetRecipe = recipeOptions?.find(
+    (option) => option.name === target
+  )?.name;
 
   return (
     <main className="min-h-screen p-4 max-w-6xl mx-auto space-y-6">
@@ -187,7 +200,7 @@ export default function Page() {
                     aria-expanded={open}
                     className="w-full justify-between"
                   >
-                    {selectedLabel || "Select recipe..."}
+                    {targetRecipe || "Select recipe..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -200,10 +213,10 @@ export default function Page() {
                     />
                     <CommandEmpty>No recipe found.</CommandEmpty>
                     <CommandGroup className="max-h-60 overflow-y-auto w-full">
-                      {filteredOptions.map((option) => (
+                      {filteredOptions?.map((option) => (
                         <CommandItem
-                          key={option.value}
-                          value={option.value}
+                          key={option.name}
+                          value={option.name}
                           onSelect={(currentValue) => {
                             setTarget(
                               currentValue === target ? "" : currentValue
@@ -215,12 +228,12 @@ export default function Page() {
                           <Check
                             className={cn(
                               "mr-2 h-4 w-4",
-                              target === option.value
+                              target === option.name
                                 ? "opacity-100"
                                 : "opacity-0"
                             )}
                           />
-                          {option.label}
+                          {option.name} - Tier {option.tier}
                         </CommandItem>
                       ))}
                     </CommandGroup>
