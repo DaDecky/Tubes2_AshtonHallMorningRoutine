@@ -19,6 +19,13 @@ import {
 } from "@/components/ui/popover";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
+import { AlertCircle } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const RecipeTree = dynamic(() => import("@/components/RecipeTree"), {
   ssr: false,
@@ -29,7 +36,6 @@ const RecipeTree = dynamic(() => import("@/components/RecipeTree"), {
   ),
 });
 
-// Mock data for recipe selection
 const RECIPE_OPTIONS = [
   { value: "brick", label: "Brick" },
   { value: "wood", label: "Wood" },
@@ -53,12 +59,14 @@ type State = {
   nodeCount: number;
   recipeFound: number;
   isLoading: boolean;
+  formError?: string;
 };
 
 type Action =
   | { type: "FETCH_START" }
-  | { type: "FETCH_SUCCESS"; payload: Omit<State, "isLoading"> }
-  | { type: "FETCH_ERROR"; error: string };
+  | { type: "FETCH_SUCCESS"; payload: Omit<State, "isLoading" | "formError"> }
+  | { type: "FETCH_ERROR"; error: string }
+  | { type: "FORM_ERROR"; error: string };
 
 const initialState: State = {
   data: undefined,
@@ -67,18 +75,25 @@ const initialState: State = {
   nodeCount: 0,
   recipeFound: 0,
   isLoading: false,
+  formError: undefined,
 };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "FETCH_START":
-      return { ...state, isLoading: true, errors: [] };
+      return { ...state, isLoading: true, errors: [], formError: undefined };
     case "FETCH_SUCCESS":
       return { ...action.payload, isLoading: false };
     case "FETCH_ERROR":
       return {
         ...state,
         errors: [...state.errors, action.error],
+        isLoading: false,
+      };
+    case "FORM_ERROR":
+      return {
+        ...state,
+        formError: action.error,
         isLoading: false,
       };
     default:
@@ -88,8 +103,9 @@ function reducer(state: State, action: Action): State {
 
 export default function Page() {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const [target, setTarget] = useState("brick");
+  const [target, setTarget] = useState<string>("");
   const [algorithm, setAlgorithm] = useState("BFS");
+  const [shortestPath, setShortestPath] = useState(false);
   const [maxRecipes, setMaxRecipes] = useState(1);
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -98,15 +114,28 @@ export default function Page() {
     option.label.toLowerCase().includes(searchValue.toLowerCase())
   );
 
-  const fetchData = async (target: string, algorithm: string, max: number) => {
+  const fetchData = async (
+    target: string,
+    algorithm: string,
+    shortest: boolean
+  ) => {
+    if (!target) {
+      dispatch({ type: "FORM_ERROR", error: "Please select a recipe" });
+      return;
+    }
+
     dispatch({ type: "FETCH_START" });
 
     try {
-      const response = await fetch(
-        `/api/testing?target=${encodeURIComponent(
-          target
-        )}&algo=${algorithm}&max=${max}`
-      );
+      const url = shortest
+        ? `/api/testing?target=${encodeURIComponent(
+            target
+          )}&algo=${algorithm}&shortest=true`
+        : `/api/testing?target=${encodeURIComponent(
+            target
+          )}&algo=${algorithm}&max=${maxRecipes}`;
+
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -133,7 +162,7 @@ export default function Page() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchData(target, algorithm, maxRecipes);
+    fetchData(target, algorithm, shortestPath);
   };
 
   const selectedLabel = RECIPE_OPTIONS.find(
@@ -149,7 +178,7 @@ export default function Page() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="target">Target Recipe</Label>
+              <Label htmlFor="target">Target Recipe *</Label>
               <Popover open={open} onOpenChange={setOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -198,6 +227,12 @@ export default function Page() {
                   </Command>
                 </PopoverContent>
               </Popover>
+              {state.formError && (
+                <p className="text-sm font-medium text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  {state.formError}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -213,22 +248,53 @@ export default function Page() {
               </select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="maxRecipes">Maximum Recipes</Label>
-              <Input
-                id="maxRecipes"
-                type="number"
-                min="1"
-                max="50"
-                value={maxRecipes}
-                onChange={(e) => setMaxRecipes(Number(e.target.value))}
-                placeholder="Default: 1"
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="shortestPath"
+                checked={shortestPath}
+                onCheckedChange={(checked) => setShortestPath(checked === true)}
               />
+              <Label htmlFor="shortestPath">
+                Find shortest path only (1 recipe)
+              </Label>
             </div>
 
-            <Button type="submit" disabled={state.isLoading} className="w-full">
-              {state.isLoading ? "Searching..." : "Search Recipes"}
-            </Button>
+            {!shortestPath && (
+              <div className="space-y-2">
+                <Label htmlFor="maxRecipes">Maximum Recipes</Label>
+                <Input
+                  id="maxRecipes"
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={maxRecipes}
+                  onChange={(e) => setMaxRecipes(Number(e.target.value))}
+                  placeholder="Default: 10"
+                />
+              </div>
+            )}
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-full">
+                  <Button
+                    type="submit"
+                    disabled={state.isLoading || !target}
+                    className="w-full"
+                  >
+                    {state.isLoading ? "Searching..." : "Search Recipes"}
+                  </Button>
+                </div>
+              </TooltipTrigger>
+              {!target && (
+                <TooltipContent
+                  side="top"
+                  className="bg-transparent text-destructive-foreground text-4xl"
+                >
+                  <p>Please select a target recipe first</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
           </form>
 
           {state.data && (
@@ -238,6 +304,11 @@ export default function Page() {
               </p>
               <p>Visited {state.nodeCount} nodes</p>
               <p>Using {algorithm} algorithm</p>
+              {shortestPath ? (
+                <p>Showing shortest path only</p>
+              ) : (
+                <p>Showing up to {maxRecipes} recipes</p>
+              )}
             </div>
           )}
         </CardContent>
@@ -255,7 +326,7 @@ export default function Page() {
                 <p key={i}>{error}</p>
               ))}
               <Button
-                onClick={() => fetchData(target, algorithm, maxRecipes)}
+                onClick={() => fetchData(target, algorithm, shortestPath)}
                 variant="outline"
               >
                 Retry
