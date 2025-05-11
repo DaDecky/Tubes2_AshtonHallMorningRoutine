@@ -11,6 +11,7 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { getLayoutedElements } from "@/utils/graphLayout";
+import Image from "next/image";
 
 type RecipeNode = {
   name: string;
@@ -20,6 +21,7 @@ type RecipeNode = {
 type recipeTreeProps = {
   data: RecipeNode;
   direction?: "TB" | "LR"; // Top-to-Bottom or Left-to-Right layout
+  useImage?: boolean;
 };
 
 const nodeDefaults = {
@@ -54,7 +56,21 @@ const generateGraphElements = (
     // @ts-expect-error ga kasih location disini, layouting dihandle @/utils/graphLayout
     generatedNodes.push({
       id: nodeId,
-      data: { label: node.name },
+      data: {
+        label: (
+          <div className="flex items-center">
+            <div className="w-12 h-12 relative">
+              <Image
+                src={`/images/${node.name}.svg`}
+                alt={node.name}
+                fill
+                // className="object-contain"
+              />
+            </div>
+            <span className="text-xl">{node.name}</span>
+          </div>
+        ),
+      },
       ...nodeDefaults,
     });
 
