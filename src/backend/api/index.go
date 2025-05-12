@@ -22,11 +22,12 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+var router = gin.Default()
+
 func main() {
 	// initialize recipes data
 	// utils.InitializeData() <-------- scrapping. just uncomment for production
 	utils.LoadRecipes("recipes.json")
-	router := gin.Default()
 
 	// cors
 	router.Use(cors.New(cors.Config{
@@ -172,4 +173,8 @@ func main() {
 	})
 
 	router.Run(":8081")
+}
+
+func Handler(w http.ResponseWriter, r *http.Request) {
+	router.ServeHTTP(w, r)
 }
