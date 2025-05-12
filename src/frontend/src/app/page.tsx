@@ -105,10 +105,13 @@ export default function Page() {
   const [searchValue, setSearchValue] = useState("");
   const [recipeOptions, setRecipeOptions] = useState<RecipeOption[]>();
 
+  
   useEffect(() => {
+    
     const fetchRecipeOptions = async () => {
       try {
-        const response = await fetch("/api/testing-recipe-option");
+        const base_url = process.env.BACKEND_URL || "http://localhost:8081";
+        const response = await fetch(base_url + "/elements", );
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -140,13 +143,14 @@ export default function Page() {
     dispatch({ type: "FETCH_START" });
 
     try {
-      const url = shortest
-        ? `/api/testing?target=${encodeURIComponent(
+      const base_url = process.env.BACKEND_URL || "http://localhost:8081";
+      const url = base_url + (shortest
+        ? `/search?target=${encodeURIComponent(
             target
           )}&algo=${algorithm}&shortest=true`
-        : `/api/testing?target=${encodeURIComponent(
+        : `/search?target=${encodeURIComponent(
             target
-          )}&algo=${algorithm}&max=${maxRecipes}`;
+          )}&algo=${algorithm}&max=${maxRecipes}`);
 
       const response = await fetch(url);
       if (!response.ok) {

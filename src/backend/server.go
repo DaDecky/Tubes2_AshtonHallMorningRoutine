@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"backend/utils"
+	"github.com/gin-contrib/cors"
 )
   
 var upgrader = websocket.Upgrader{
@@ -26,6 +27,17 @@ func main() {
 	utils.LoadRecipes("recipes.json")
 	router := gin.Default()
   
+	// cors 
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:8080"}, // Frontend origin
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+
+
 	// search biasa
 	router.GET("/search", func(c *gin.Context) {
 		start := time.Now()
@@ -161,5 +173,5 @@ func main() {
 		c.JSON(http.StatusOK, jsonObj)
 	})
   
-	router.Run("localhost:8081")
+	router.Run(":8081")
 }

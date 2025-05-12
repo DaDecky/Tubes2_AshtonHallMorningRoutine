@@ -1,25 +1,23 @@
-version: "3.8"
-
 services:
   frontend:
+    container_name: frontend
     build:
       context: ./src/frontend
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
-    volumes:
-      - ./src/frontend:/app
-      - /app/node_modules
-      - /app/.next
+    depends_on:
+      - backend
+    environment:
+      - BACKEND_URL=http://backend:8081
       
   backend:
+    container_name: backend
     build:
       context: ./src/backend
       dockerfile: Dockerfile
     ports:
       - "8081:8081"
-    volumes:
-      - ./src/backend:/app
     environment:
-      BACKEND_PORT: "8081"
+      - FRONTEND_URL=http://frontend:8080
 

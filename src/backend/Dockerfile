@@ -1,22 +1,16 @@
-# use official Golang image
-FROM golang:1.16.3-alpine3.13
+# backend/Dockerfile
+FROM golang:1.24-alpine
 
-# set working directory
-WORKDIR /backend-server
+WORKDIR /app
 
-# Copy the source code
+COPY go.mod ./
+COPY go.sum ./
+RUN go mod tidy
+
 COPY . .
 
-# Download and install the dependencies
-RUN go get -d -v ./...
+RUN go build -o server .
 
-# Build the Go app
-RUN go build -o backend-server .
+EXPOSE 8081
 
-#EXPOSE the port
-EXPOSE 8000
-
-# Run the executable
-CMD ["./backend-server"]
-
-# betak dari website, gk tau work apa kgk. gw masih manual
+CMD ["./server"]
