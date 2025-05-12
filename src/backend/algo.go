@@ -94,14 +94,14 @@ func findRecipes(ing1, ing2 string, graph map[string][][2]string) []string {
 
 func BFS(target string, graph map[string][][2]string, tiers map[string]int, maxRecipes int) ([]RecipePath, int) {
 	craftable := make(map[string]bool)
-	visited := make(map[string]bool) // New visited map
+	visited := make(map[string]bool)
 	recipeVariants := make(map[string][]RecipeStep)
 	visitCount := 0
 
 	// Initialize base elements
 	for base := range baseElements {
 		craftable[base] = true
-		visited[base] = true // Mark base as visited
+		visited[base] = true
 	}
 
 	queue := make([]string, 0, len(baseElements))
@@ -116,9 +116,12 @@ func BFS(target string, graph map[string][][2]string, tiers map[string]int, maxR
 
 		for ingredient := range craftable {
 			possibleResults := findRecipes(current, ingredient, graph)
-
 			for _, result := range possibleResults {
-				if !visited[result] {
+				resultTier := tiers[result]
+				currentTier := tiers[current]
+				ingredientTier := tiers[ingredient]
+
+				if resultTier > currentTier && resultTier > ingredientTier {
 					newRecipe := RecipeStep{
 						Ingredient1: current,
 						Ingredient2: ingredient,
@@ -141,7 +144,7 @@ func BFS(target string, graph map[string][][2]string, tiers map[string]int, maxR
 
 					if !craftable[result] {
 						craftable[result] = true
-						visited[result] = true // Mark as visited
+						visited[result] = true
 						queue = append(queue, result)
 					}
 				}
@@ -248,7 +251,7 @@ func DFS(target string, graph map[string][][2]string, tiers map[string]int, maxR
 	craftable := make(map[string]bool)
 	recipeVariants := make(map[string][]RecipeStep)
 	visitCount := 0
-	visited := make(map[string]bool)	
+	visited := make(map[string]bool)
 	stack := []string{}
 
 	for base := range baseElements {
@@ -265,44 +268,39 @@ func DFS(target string, graph map[string][][2]string, tiers map[string]int, maxR
 
 		for ingredient := range craftable {
 			possibleResults := findRecipes(current, ingredient, graph)
-			validResults := make([]string, 0)
 
 			for _, result := range possibleResults {
-				resTier := tiers[result]
-				currTier := tiers[current]
-				ingTier := tiers[ingredient]
+				resultTier := tiers[result]
+				currentTier := tiers[current]
+				ingredientTier := tiers[ingredient]
 
-				if resTier > currTier || resTier > ingTier {
-					validResults = append(validResults, result)
-				}
-			}
+				if resultTier > currentTier && resultTier > ingredientTier {
+					newRecipe := RecipeStep{
+						Ingredient1: current,
+						Ingredient2: ingredient,
+						Result:      result,
+					}
 
-			for _, result := range validResults {
-				newRecipe := RecipeStep{
-					Ingredient1: current,
-					Ingredient2: ingredient,
-					Result:      result,
-				}
+					if len(recipeVariants[result]) < maxRecipes {
+						isDuplicate := false
+						for _, existingRecipe := range recipeVariants[result] {
+							if (existingRecipe.Ingredient1 == current && existingRecipe.Ingredient2 == ingredient) ||
+								(existingRecipe.Ingredient1 == ingredient && existingRecipe.Ingredient2 == current) {
+								isDuplicate = true
+								break
+							}
+						}
 
-				if len(recipeVariants[result]) < maxRecipes {
-					isDuplicate := false
-					for _, existingRecipe := range recipeVariants[result] {
-						if (existingRecipe.Ingredient1 == current && existingRecipe.Ingredient2 == ingredient) ||
-							(existingRecipe.Ingredient1 == ingredient && existingRecipe.Ingredient2 == current) {
-							isDuplicate = true
-							break
+						if !isDuplicate {
+							recipeVariants[result] = append(recipeVariants[result], newRecipe)
 						}
 					}
 
-					if !isDuplicate {
-						recipeVariants[result] = append(recipeVariants[result], newRecipe)
+					if !craftable[result] && !visited[result] {
+						craftable[result] = true
+						visited[result] = true
+						stack = append(stack, result)
 					}
-				}
-
-				if !craftable[result] && !visited[result] {
-					craftable[result] = true
-					visited[result] = true
-					stack = append(stack, result)
 				}
 			}
 		}
@@ -505,9 +503,9 @@ func printTreeAsHeap(root *TreeNode, prefix string, isLast bool) {
 // 		return
 // 	}
 
-// 	target := "Wood"
-// 	findShortest := true
-// 	useBFS := true
+// 	target := "Picnic"
+// 	findShortest := false
+// 	useBFS := false
 // 	maxRecipes := 8
 
 // 	startTime := time.Now()
