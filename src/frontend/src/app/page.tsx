@@ -153,7 +153,7 @@ export default function Page() {
           )}&algo=${algorithm}&max=${maxRecipes}`);
 
       const response = await fetch(url);
-      if (!response.ok) {
+      if (!response.ok && (response.status != 400)) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 

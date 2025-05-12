@@ -543,7 +543,7 @@ func Search(target string, findShortest bool, useBFS bool, maxRecipes int) ([]Re
 			return recipePaths, nodeCount, len(recipePaths), nil
 		}
 	} else {
-		return nil, 0, 0, fmt.Errorf("no recipes found")
+		return nil, 0, 0, fmt.Errorf("no recipes found for %s", target)
 	}
 }
 
