@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"encoding/json"
@@ -38,6 +38,19 @@ type RecipePath struct {
 	TreeRoot *TreeNode
 }
 
+type JSONRecipeNode struct {
+	Name     string              `json:"name"`
+	Recipes  [][2]*JSONRecipeNode   `json:"recipes,omitempty"`
+}
+
+type JSONResponse struct {
+	Data         *JSONRecipeNode `json:"data"`
+	Errors       []string    `json:"errors"`
+	Time         int64       `json:"time"`          // milliseconds
+	NodeCount    int         `json:"nodeCount"`     // nodes visited
+	RecipeFound  int         `json:"recipeFound"`   // recipes found
+}
+
 var baseElements = map[string]bool{
 	"Air":   true,
 	"Earth": true,
@@ -45,21 +58,26 @@ var baseElements = map[string]bool{
 	"Water": true,
 }
 
-func loadRecipes(filename string) (map[string][][2]string, map[string]int) {
+var (
+	graph map[string][][2]string
+	tiers map[string]int
+) 
+
+func LoadRecipes(filename string) {
 	file, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Printf("Error reading recipes file: %v\n", err)
-		return nil, nil
+		return
 	}
 
 	var recipes []Recipe
 	if err := json.Unmarshal(file, &recipes); err != nil {
 		fmt.Printf("Error unmarshaling recipes: %v\n", err)
-		return nil, nil
+		return
 	}
 
-	graph := make(map[string][][2]string)
-	tiers := make(map[string]int)
+	graph = make(map[string][][2]string)
+	tiers = make(map[string]int)
 
 	for base := range baseElements {
 		tiers[base] = 0
@@ -73,8 +91,6 @@ func loadRecipes(filename string) (map[string][][2]string, map[string]int) {
 			tiers[r.Result] = r.Tier
 		}
 	}
-
-	return graph, tiers
 }
 
 func findRecipes(ing1, ing2 string, graph map[string][][2]string) []string {
@@ -497,6 +513,108 @@ func printTreeAsHeap(root *TreeNode, prefix string, isLast bool) {
 		printTreeAsHeap(child, childPrefix, isLastChild)
 	}
 }
+
+func Search(target string, findShortest bool, useBFS bool, maxRecipes int) ([]RecipePath, int, int, error) {
+	var recipePaths []RecipePath
+
+	if useBFS {
+		fmt.Println("Finding shortest recipe using BFS...")
+		recipePaths, _ = BFS(target, graph, tiers, maxRecipes)
+	} else {
+		fmt.Println("Finding shortest recipe using DFS...")
+		recipePaths, _ = DFS(target, graph, tiers, maxRecipes)
+	}
+	
+	fmt.Printf("number of recipes: %d\n", len((recipePaths)))
+	if len(recipePaths) > 0 {		
+		if findShortest {
+			sort.Slice(recipePaths, func(i, j int) bool {
+				return len(recipePaths[i].Steps) < len(recipePaths[j].Steps)
+			})
+
+			path := recipePaths[0]
+			stats := calculateTreeStats(path.TreeRoot)
+			return []RecipePath{path}, stats.NodeCount, len(recipePaths), nil
+		} else {
+			var nodeCount int
+
+			for _, path := range recipePaths {
+				stats := calculateTreeStats(path.TreeRoot)
+				nodeCount += stats.NodeCount
+			}
+			return recipePaths, nodeCount, len(recipePaths), nil
+		}
+	} else {
+		return nil, 0, 0, fmt.Errorf("no recipes found")
+	}
+}
+
+func _convertToJSONFormat(node *TreeNode) *JSONRecipeNode {
+	if node == nil {
+		return nil
+	}
+
+	jsonNode := &JSONRecipeNode{
+		Name: node.Element,
+	}
+
+	// Base elements or nodes without children don't have recipes
+	if len(node.Children) == 0 || baseElements[node.Element] {
+		return jsonNode
+	}
+
+	// Create a recipe entry with 2 ingredients
+	var recipe [2]*JSONRecipeNode
+        for i := 0; i < 2 && i < len(node.Children); i++ {
+            recipe[i] = _convertToJSONFormat(node.Children[i])
+        }
+
+	
+	jsonNode.Recipes = append(jsonNode.Recipes, recipe)
+	return jsonNode
+}
+
+func ConvertToJSONFormat(recipes []RecipePath) *JSONRecipeNode {
+	if recipes == nil {
+		return nil
+	}
+
+	jsonNode := &JSONRecipeNode{
+		Name: recipes[0].TreeRoot.Element,
+	}
+
+	for _, recipe := range recipes {
+		jsonNode.Recipes = append(jsonNode.Recipes, _convertToJSONFormat(recipe.TreeRoot).Recipes...)
+	}
+
+	return jsonNode
+}
+
+
+// Convert the tree to JSON structure
+func WriteTreeToJSONFile(recipes []RecipePath, filename string) error {
+	jsonRoot := ConvertToJSONFormat(recipes)
+
+	// Create the output file
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Create a JSON encoder with indentation
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ") // 2-space indentation
+
+	// Write the JSON to file
+	if err := encoder.Encode(jsonRoot); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+
 
 // func main() {
 // 	graph, tiers := loadRecipes("recipes.json")

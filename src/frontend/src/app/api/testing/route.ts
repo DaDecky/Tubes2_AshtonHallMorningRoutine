@@ -22,24 +22,21 @@ type JSONResponse = {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const params = Object.fromEntries(searchParams.entries());
-  const algo = params.algo == undefined ? "BFS" : params.algo;
-  const max = params.max == undefined ? -1 : parseInt(params.max);
   const target = params.target == undefined ? "Brick" : params.target;
-  // const mode = params.mode == undefined ? "Shortest" : params.mode;
-  const isShortest =
-    params.shortest == undefined
-      ? false
-      : params.shortest == "true"
-      ? true
-      : false;
+  const algo = params.algo == undefined ? "BFS" : params.algo;
 
-  const result: JSONResponse = {
-    data: target === "Sheet Music" ? data1 : data2,
-    errors: [],
-    time: 43,
-    nodeCount: 100,
-    recipefound: 2,
-  };
 
-  return NextResponse.json(result);
+  let url = `http://localhost:8081/search?target=${target}&algo=${algo}`
+  if (params.shortest != undefined) {
+    url += "&shortest=true"
+  }
+  if (params.max != undefined) {
+    url += "&max=" + params.max
+  }
+
+  const response = await fetch(url);
+
+  let jsonData = await response.json();
+
+  return NextResponse.json(jsonData);
 }

@@ -7,16 +7,11 @@ type RecipeOption = {
   name: string;
 };
 
-const RECIPE_OPTIONS: RecipeOption[] = [
-  { tier: 0, name: "Brick" },
-  { tier: 0, name: "Wood" },
-  { tier: 0, name: "Steel" },
-  { tier: 0, name: "Glass" },
-  { tier: 0, name: "Plastic" },
-  { tier: 0, name: "Concrete" },
-  { tier: 0, name: "Ceramic" },
-  { tier: 0, name: "Aluminum" },
-];
+const response = await fetch("http://localhost:8081/elements");
+let jsonData = await response.json();
+
+
+const RECIPE_OPTIONS: RecipeOption[] = jsonData
 
 export async function GET() {
   return NextResponse.json(RECIPE_OPTIONS);
