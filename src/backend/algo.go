@@ -6,9 +6,11 @@ import (
 	"os"
 	"sort"
 	"sync"
+	// "time"
 )
 
 type Recipe struct {
+	Tier   int      `json:"tier"`
 	Result string   `json:"result"`
 	Recipe []string `json:"recipe"`
 }
@@ -43,27 +45,36 @@ var baseElements = map[string]bool{
 	"Water": true,
 }
 
-func loadRecipes(filename string) map[string][][2]string {
+func loadRecipes(filename string) (map[string][][2]string, map[string]int) {
 	file, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Printf("Error reading recipes file: %v\n", err)
-		return nil
+		return nil, nil
 	}
 
 	var recipes []Recipe
 	if err := json.Unmarshal(file, &recipes); err != nil {
 		fmt.Printf("Error unmarshaling recipes: %v\n", err)
-		return nil
+		return nil, nil
 	}
 
 	graph := make(map[string][][2]string)
+	tiers := make(map[string]int)
+
+	for base := range baseElements {
+		tiers[base] = 0
+	}
+
 	for _, r := range recipes {
 		if len(r.Recipe) == 2 {
 			graph[r.Result] = append(graph[r.Result], [2]string{r.Recipe[0], r.Recipe[1]})
 		}
+		if _, exists := tiers[r.Result]; !exists {
+			tiers[r.Result] = r.Tier
+		}
 	}
 
-	return graph
+	return graph, tiers
 }
 
 func findRecipes(ing1, ing2 string, graph map[string][][2]string) []string {
@@ -81,20 +92,19 @@ func findRecipes(ing1, ing2 string, graph map[string][][2]string) []string {
 	return results
 }
 
-func BFS(target string, graph map[string][][2]string, maxRecipes int) ([]RecipePath, int) {
-	if maxRecipes <= 0 {
-		maxRecipes = 1
-	}
-
+func BFS(target string, graph map[string][][2]string, tiers map[string]int, maxRecipes int) ([]RecipePath, int) {
 	craftable := make(map[string]bool)
+	visited := make(map[string]bool) // New visited map
 	recipeVariants := make(map[string][]RecipeStep)
 	visitCount := 0
 
+	// Initialize base elements
 	for base := range baseElements {
 		craftable[base] = true
+		visited[base] = true // Mark base as visited
 	}
 
-	queue := []string{}
+	queue := make([]string, 0, len(baseElements))
 	for base := range baseElements {
 		queue = append(queue, base)
 	}
@@ -108,30 +118,32 @@ func BFS(target string, graph map[string][][2]string, maxRecipes int) ([]RecipeP
 			possibleResults := findRecipes(current, ingredient, graph)
 
 			for _, result := range possibleResults {
-				newRecipe := RecipeStep{
-					Ingredient1: current,
-					Ingredient2: ingredient,
-					Result:      result,
-				}
+				if !visited[result] {
+					newRecipe := RecipeStep{
+						Ingredient1: current,
+						Ingredient2: ingredient,
+						Result:      result,
+					}
 
-				if len(recipeVariants[result]) < maxRecipes {
-					isDuplicate := false
-					for _, existingRecipe := range recipeVariants[result] {
-						if (existingRecipe.Ingredient1 == current && existingRecipe.Ingredient2 == ingredient) ||
-							(existingRecipe.Ingredient1 == ingredient && existingRecipe.Ingredient2 == current) {
-							isDuplicate = true
-							break
+					if len(recipeVariants[result]) < maxRecipes {
+						isDuplicate := false
+						for _, existing := range recipeVariants[result] {
+							if (existing.Ingredient1 == current && existing.Ingredient2 == ingredient) ||
+								(existing.Ingredient1 == ingredient && existing.Ingredient2 == current) {
+								isDuplicate = true
+								break
+							}
+						}
+						if !isDuplicate {
+							recipeVariants[result] = append(recipeVariants[result], newRecipe)
 						}
 					}
 
-					if !isDuplicate {
-						recipeVariants[result] = append(recipeVariants[result], newRecipe)
+					if !craftable[result] {
+						craftable[result] = true
+						visited[result] = true // Mark as visited
+						queue = append(queue, result)
 					}
-				}
-
-				if !craftable[result] {
-					craftable[result] = true
-					queue = append(queue, result)
 				}
 			}
 		}
@@ -145,44 +157,76 @@ func BFS(target string, graph map[string][][2]string, maxRecipes int) ([]RecipeP
 	var allPaths []RecipePath
 	processedCount := 0
 
-	resultChan := make(chan RecipePath, maxRecipes)
-	var wg sync.WaitGroup
+	if maxRecipes > 1 {
+		resultChan := make(chan RecipePath, maxRecipes)
+		var wg sync.WaitGroup
+		maxWorkers := 3
+		sem := make(chan struct{}, maxWorkers)
 
-	for _, recipeVariant := range recipeVariants[target] {
-		if processedCount >= maxRecipes {
-			break
+		recipesToProcess := 0
+		for range recipeVariants[target] {
+			if processedCount >= maxRecipes {
+				break
+			}
+			processedCount++
+			recipesToProcess++
 		}
-		processedCount++
 
-		wg.Add(1)
-		go func(recipe RecipeStep) {
-			defer wg.Done()
+		processedCount = 0
 
-			recipeMap := make(map[string]RecipeStep)
-			visited := make(map[string]bool)
+		for _, recipeVariant := range recipeVariants[target] {
+			if processedCount >= maxRecipes {
+				break
+			}
+			processedCount++
 
-			buildRecursiveRecipeMap(recipe, recipeVariants, recipeMap, visited, 50)
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(recipe RecipeStep) {
+				defer wg.Done()
+				defer func() { <-sem }()
 
-			var craftingPath []RecipeStep
-			for element, step := range recipeMap {
-				if element != "" { // Skip any empty keys
+				recipeMap := buildIterativeRecipeMap(recipe, recipeVariants)
+				craftingPath := make([]RecipeStep, 0, len(recipeMap))
+				for _, step := range recipeMap {
 					craftingPath = append(craftingPath, step)
 				}
+
+				treeRoot := buildCraftingTreeFromMap(target, recipeMap, make(map[string]bool))
+				resultChan <- RecipePath{craftingPath, treeRoot}
+			}(recipeVariant)
+		}
+
+		go func() {
+			wg.Wait()
+			close(resultChan)
+		}()
+
+		collectedCount := 0
+		for path := range resultChan {
+			allPaths = append(allPaths, path)
+			collectedCount++
+			if collectedCount >= recipesToProcess {
+				break
+			}
+		}
+	} else {
+		for _, recipeVariant := range recipeVariants[target] {
+			if processedCount >= maxRecipes {
+				break
+			}
+			processedCount++
+
+			recipeMap := buildIterativeRecipeMap(recipeVariant, recipeVariants)
+			craftingPath := make([]RecipeStep, 0, len(recipeMap))
+			for _, step := range recipeMap {
+				craftingPath = append(craftingPath, step)
 			}
 
-			treeRoot := buildCraftingTreeFromMap(target, recipeMap)
-
-			resultChan <- RecipePath{craftingPath, treeRoot}
-		}(recipeVariant)
-	}
-
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
-
-	for path := range resultChan {
-		allPaths = append(allPaths, path)
+			treeRoot := buildCraftingTreeFromMap(target, recipeMap, make(map[string]bool))
+			allPaths = append(allPaths, RecipePath{craftingPath, treeRoot})
+			recipeMap = nil
+		}
 	}
 
 	sort.Slice(allPaths, func(i, j int) bool {
@@ -196,53 +240,20 @@ func BFS(target string, graph map[string][][2]string, maxRecipes int) ([]RecipeP
 	return allPaths, visitCount
 }
 
-func buildRecursiveRecipeMap(recipe RecipeStep, recipeVariants map[string][]RecipeStep, recipeMap map[string]RecipeStep, visited map[string]bool, maxDepth int) {
-	if maxDepth <= 0 {
-		fmt.Println("Warning: Maximum recursion depth reached. Recipe chain might be incomplete.")
-		return
-	}
-
-	if visited[recipe.Result] {
-		return
-	}
-
-	visited[recipe.Result] = true
-	recipeMap[recipe.Result] = recipe
-
-	if !baseElements[recipe.Ingredient1] {
-		if len(recipeVariants[recipe.Ingredient1]) > 0 {
-			buildRecursiveRecipeMap(recipeVariants[recipe.Ingredient1][0], recipeVariants, recipeMap, visited, maxDepth-1)
-		} else {
-			fmt.Printf("Warning: No recipe found for intermediate ingredient %s\n", recipe.Ingredient1)
-		}
-	}
-
-	if !baseElements[recipe.Ingredient2] {
-		if len(recipeVariants[recipe.Ingredient2]) > 0 {
-			buildRecursiveRecipeMap(recipeVariants[recipe.Ingredient2][0], recipeVariants, recipeMap, visited, maxDepth-1)
-		} else {
-			fmt.Printf("Warning: No recipe found for intermediate ingredient %s\n", recipe.Ingredient2)
-		}
-	}
-}
-
-func DFS(target string, graph map[string][][2]string, maxRecipes int) ([]RecipePath, int) {
+func DFS(target string, graph map[string][][2]string, tiers map[string]int, maxRecipes int) ([]RecipePath, int) {
 	if maxRecipes <= 0 {
-		maxRecipes = 1 // Default to at least one recipe
+		maxRecipes = 1
 	}
 
 	craftable := make(map[string]bool)
 	recipeVariants := make(map[string][]RecipeStep)
 	visitCount := 0
-
-	for base := range baseElements {
-		craftable[base] = true
-	}
-
-	visited := make(map[string]bool)
+	visited := make(map[string]bool)	
 	stack := []string{}
 
 	for base := range baseElements {
+		craftable[base] = true
+		visited[base] = true
 		stack = append(stack, base)
 	}
 
@@ -250,19 +261,23 @@ func DFS(target string, graph map[string][][2]string, maxRecipes int) ([]RecipeP
 		lastIdx := len(stack) - 1
 		current := stack[lastIdx]
 		stack = stack[:lastIdx]
-
 		visitCount++
-
-		if visited[current] {
-			continue
-		}
-
-		visited[current] = true
 
 		for ingredient := range craftable {
 			possibleResults := findRecipes(current, ingredient, graph)
+			validResults := make([]string, 0)
 
 			for _, result := range possibleResults {
+				resTier := tiers[result]
+				currTier := tiers[current]
+				ingTier := tiers[ingredient]
+
+				if resTier > currTier || resTier > ingTier {
+					validResults = append(validResults, result)
+				}
+			}
+
+			for _, result := range validResults {
 				newRecipe := RecipeStep{
 					Ingredient1: current,
 					Ingredient2: ingredient,
@@ -284,8 +299,9 @@ func DFS(target string, graph map[string][][2]string, maxRecipes int) ([]RecipeP
 					}
 				}
 
-				if !craftable[result] {
+				if !craftable[result] && !visited[result] {
 					craftable[result] = true
+					visited[result] = true
 					stack = append(stack, result)
 				}
 			}
@@ -300,44 +316,61 @@ func DFS(target string, graph map[string][][2]string, maxRecipes int) ([]RecipeP
 	var allPaths []RecipePath
 	processedCount := 0
 
-	resultChan := make(chan RecipePath, maxRecipes)
-	var wg sync.WaitGroup
+	if maxRecipes > 1 {
+		resultChan := make(chan RecipePath, maxRecipes)
+		var wg sync.WaitGroup
+		maxWorkers := 3
+		sem := make(chan struct{}, maxWorkers)
 
-	for _, recipeVariant := range recipeVariants[target] {
-		if processedCount >= maxRecipes {
-			break
-		}
-		processedCount++
+		for _, recipeVariant := range recipeVariants[target] {
+			if processedCount >= maxRecipes {
+				break
+			}
+			processedCount++
 
-		wg.Add(1)
-		go func(recipe RecipeStep) {
-			defer wg.Done()
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(recipe RecipeStep) {
+				defer wg.Done()
+				defer func() { <-sem }()
 
-			recipeMap := make(map[string]RecipeStep)
-			visited := make(map[string]bool)
-
-			buildFixedDependencyGraph(recipe, recipeVariants, recipeMap, visited, 50)
-
-			var craftingPath []RecipeStep
-			for element, step := range recipeMap {
-				if element != "" { // Skip any empty keys
+				recipeMap := buildIterativeRecipeMap(recipe, recipeVariants)
+				craftingPath := make([]RecipeStep, 0, len(recipeMap))
+				for _, step := range recipeMap {
 					craftingPath = append(craftingPath, step)
 				}
+
+				treeRoot := buildCraftingTreeFromMap(target, recipeMap, make(map[string]bool))
+				resultChan <- RecipePath{craftingPath, treeRoot}
+				recipeMap = nil
+			}(recipeVariant)
+		}
+
+		go func() {
+			wg.Wait()
+			close(resultChan)
+		}()
+
+		for path := range resultChan {
+			allPaths = append(allPaths, path)
+		}
+	} else {
+		for _, recipeVariant := range recipeVariants[target] {
+			if processedCount >= maxRecipes {
+				break
+			}
+			processedCount++
+
+			recipeMap := buildIterativeRecipeMap(recipeVariant, recipeVariants)
+			craftingPath := make([]RecipeStep, 0, len(recipeMap))
+			for _, step := range recipeMap {
+				craftingPath = append(craftingPath, step)
 			}
 
-			treeRoot := buildCraftingTreeFromMap(target, recipeMap)
-
-			resultChan <- RecipePath{craftingPath, treeRoot}
-		}(recipeVariant)
-	}
-
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
-
-	for path := range resultChan {
-		allPaths = append(allPaths, path)
+			treeRoot := buildCraftingTreeFromMap(target, recipeMap, make(map[string]bool))
+			allPaths = append(allPaths, RecipePath{craftingPath, treeRoot})
+			recipeMap = nil
+		}
 	}
 
 	sort.Slice(allPaths, func(i, j int) bool {
@@ -351,127 +384,35 @@ func DFS(target string, graph map[string][][2]string, maxRecipes int) ([]RecipeP
 	return allPaths, visitCount
 }
 
-func buildFixedDependencyGraph(recipe RecipeStep, recipeVariants map[string][]RecipeStep, recipeMap map[string]RecipeStep, visited map[string]bool, maxDepth int) {
-	if maxDepth <= 0 {
-		fmt.Println("Warning: Maximum recursion depth reached. Recipe chain might be incomplete.")
-		return
-	}
+func buildIterativeRecipeMap(recipe RecipeStep, recipeVariants map[string][]RecipeStep) map[string]RecipeStep {
+	stack := []RecipeStep{recipe}
+	recipeMap := make(map[string]RecipeStep)
 
-	if _, exists := recipeMap[recipe.Result]; !exists {
-		recipeMap[recipe.Result] = recipe
-	}
+	for len(stack) > 0 {
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
 
-	if !baseElements[recipe.Ingredient1] {
-		if len(recipeVariants[recipe.Ingredient1]) > 0 {
-			subRecipe := recipeVariants[recipe.Ingredient1][0]
-
-			if !visited[recipe.Ingredient1] {
-				visited[recipe.Ingredient1] = true
-				buildFixedDependencyGraph(subRecipe, recipeVariants, recipeMap, visited, maxDepth-1)
-				visited[recipe.Ingredient1] = false // Allow revisiting for different paths
+		if _, exists := recipeMap[current.Result]; !exists {
+			recipeMap[current.Result] = current
+			if !baseElements[current.Ingredient1] {
+				stack = append(stack, recipeVariants[current.Ingredient1][0])
 			}
-		} else {
-			fmt.Printf("Warning: No recipe found for ingredient %s\n", recipe.Ingredient1)
-		}
-	}
-
-	if !baseElements[recipe.Ingredient2] {
-		if len(recipeVariants[recipe.Ingredient2]) > 0 {
-			subRecipe := recipeVariants[recipe.Ingredient2][0]
-
-			if !visited[recipe.Ingredient2] {
-				visited[recipe.Ingredient2] = true
-				buildFixedDependencyGraph(subRecipe, recipeVariants, recipeMap, visited, maxDepth-1)
-				visited[recipe.Ingredient2] = false // Allow revisiting for different paths
+			if !baseElements[current.Ingredient2] {
+				stack = append(stack, recipeVariants[current.Ingredient2][0])
 			}
-		} else {
-			fmt.Printf("Warning: No recipe found for ingredient %s\n", recipe.Ingredient2)
 		}
 	}
+	return recipeMap
 }
 
-func explorePathDFS(element string, recipeFor map[string]RecipeStep, visited map[string]bool, depthMap map[string]int, depth int) {
-	if visited[element] || baseElements[element] {
-		return
-	}
-
-	visited[element] = true
-	depthMap[element] = depth
-
-	recipe, exists := recipeFor[element]
-	if !exists {
-		return
-	}
-
-	ing1, ing2 := recipe.Ingredient1, recipe.Ingredient2
-
-	explorePathDFS(ing1, recipeFor, visited, depthMap, depth+1)
-	explorePathDFS(ing2, recipeFor, visited, depthMap, depth+1)
-}
-
-func buildCraftingTree(target string, recipeFor map[string]RecipeStep, dependencies map[string][]string) *TreeNode {
-	if baseElements[target] {
-		return &TreeNode{
-			Element:  target,
-			Children: nil,
-		}
-	}
-
-	recipe, exists := recipeFor[target]
-	if !exists {
-		return &TreeNode{
-			Element:  target,
-			Children: nil,
-		}
-	}
-
-	node := &TreeNode{
-		Element:    target,
-		RecipeStep: &recipe,
-		Children:   make([]*TreeNode, 0),
-	}
-
-	ing1 := recipe.Ingredient1
-	ing2 := recipe.Ingredient2
-
-	node.Children = append(node.Children, buildCraftingTree(ing1, recipeFor, dependencies))
-	node.Children = append(node.Children, buildCraftingTree(ing2, recipeFor, dependencies))
-
-	return node
-}
-
-func buildCraftingTreeDFS(element string, bestRecipe map[string]RecipeStep) *TreeNode {
-	if baseElements[element] {
+func buildCraftingTreeFromMap(element string, recipeMap map[string]RecipeStep, path map[string]bool) *TreeNode {
+	if path[element] {
 		return &TreeNode{
 			Element:  element,
 			Children: nil,
 		}
 	}
 
-	recipe, exists := bestRecipe[element]
-	if !exists {
-		return &TreeNode{
-			Element:  element,
-			Children: nil,
-		}
-	}
-
-	node := &TreeNode{
-		Element:    element,
-		RecipeStep: &recipe,
-		Children:   make([]*TreeNode, 0),
-	}
-
-	ing1 := recipe.Ingredient1
-	ing2 := recipe.Ingredient2
-
-	node.Children = append(node.Children, buildCraftingTreeDFS(ing1, bestRecipe))
-	node.Children = append(node.Children, buildCraftingTreeDFS(ing2, bestRecipe))
-
-	return node
-}
-
-func buildCraftingTreeFromMap(element string, recipeMap map[string]RecipeStep) *TreeNode {
 	if baseElements[element] {
 		return &TreeNode{
 			Element:  element,
@@ -487,6 +428,12 @@ func buildCraftingTreeFromMap(element string, recipeMap map[string]RecipeStep) *
 		}
 	}
 
+	newPath := make(map[string]bool, len(path)+1)
+	for k, v := range path {
+		newPath[k] = v
+	}
+	newPath[element] = true
+
 	node := &TreeNode{
 		Element:    element,
 		RecipeStep: &recipe,
@@ -496,13 +443,12 @@ func buildCraftingTreeFromMap(element string, recipeMap map[string]RecipeStep) *
 	ing1 := recipe.Ingredient1
 	ing2 := recipe.Ingredient2
 
-	node.Children = append(node.Children, buildCraftingTreeFromMap(ing1, recipeMap))
-	node.Children = append(node.Children, buildCraftingTreeFromMap(ing2, recipeMap))
+	node.Children = append(node.Children, buildCraftingTreeFromMap(ing1, recipeMap, newPath))
+	node.Children = append(node.Children, buildCraftingTreeFromMap(ing2, recipeMap, newPath))
 
 	return node
 }
 
-// debug
 func calculateTreeStats(root *TreeNode) TreeStats {
 	if root == nil {
 		return TreeStats{0, 0, 0}
@@ -526,7 +472,6 @@ func calculateTreeStats(root *TreeNode) TreeStats {
 	return stats
 }
 
-// debug
 func printTreeAsHeap(root *TreeNode, prefix string, isLast bool) {
 	if root == nil {
 		return
@@ -553,31 +498,30 @@ func printTreeAsHeap(root *TreeNode, prefix string, isLast bool) {
 	}
 }
 
-//claude from driver :3
 // func main() {
-// 	graph := loadRecipes("recipes.json")
+// 	graph, tiers := loadRecipes("recipes.json")
+// 	if graph == nil || tiers == nil {
+// 		fmt.Println("Failed to load recipes")
+// 		return
+// 	}
 
-// 	target := "Mailbox"
-// 	findShortest := false
+// 	target := "Wood"
+// 	findShortest := true
 // 	useBFS := true
-// 	maxRecipes := 6
+// 	maxRecipes := 8
 
 // 	startTime := time.Now()
 
 // 	if findShortest {
 // 		if useBFS {
 // 			fmt.Println("Finding shortest recipe using BFS...")
-// 			recipePaths, visitCount := BFS(target, graph, maxRecipes)
+// 			recipePaths, visitCount := BFS(target, graph, tiers, maxRecipes)
 // 			if len(recipePaths) > 0 {
 // 				sort.Slice(recipePaths, func(i, j int) bool {
 // 					return len(recipePaths[i].Steps) < len(recipePaths[j].Steps)
 // 				})
 
 // 				path := recipePaths[0]
-// 				fmt.Printf("\nFound shortest recipe for %s using BFS:\n", target)
-// 				for i, step := range path.Steps {
-// 					fmt.Printf("%d. Combine %s + %s = %s\n", i+1, step.Ingredient1, step.Ingredient2, step.Result)
-// 				}
 
 // 				fmt.Println("\nRecipe Tree:")
 // 				printTreeAsHeap(path.TreeRoot, "", true)
@@ -590,17 +534,13 @@ func printTreeAsHeap(root *TreeNode, prefix string, isLast bool) {
 // 			}
 // 		} else {
 // 			fmt.Println("Finding shortest recipe using DFS...")
-// 			recipePaths, visitCount := DFS(target, graph, maxRecipes)
+// 			recipePaths, visitCount := DFS(target, graph, tiers, maxRecipes)
 // 			if len(recipePaths) > 0 {
 // 				sort.Slice(recipePaths, func(i, j int) bool {
 // 					return len(recipePaths[i].Steps) < len(recipePaths[j].Steps)
 // 				})
 
 // 				path := recipePaths[0]
-// 				fmt.Printf("\nFound shortest recipe for %s using DFS:\n", target)
-// 				for i, step := range path.Steps {
-// 					fmt.Printf("%d. Combine %s + %s = %s\n", i+1, step.Ingredient1, step.Ingredient2, step.Result)
-// 				}
 
 // 				fmt.Println("\nRecipe Tree:")
 // 				printTreeAsHeap(path.TreeRoot, "", true)
@@ -615,49 +555,38 @@ func printTreeAsHeap(root *TreeNode, prefix string, isLast bool) {
 // 	} else {
 // 		if useBFS {
 // 			fmt.Printf("Finding up to %d recipes using BFS...\n", maxRecipes)
-// 			recipePaths, visitCount := BFS(target, graph, maxRecipes)
+// 			recipePaths, visitCount := BFS(target, graph, tiers, maxRecipes)
 // 			if len(recipePaths) > 0 {
 // 				fmt.Printf("\nFound %d recipes for %s using BFS:\n", len(recipePaths), target)
 // 				for _, path := range recipePaths {
-// 					fmt.Println("\nRecipe Path:")
-// 					for i, step := range path.Steps {
-// 						fmt.Printf("%d. Combine %s + %s = %s\n", i+1, step.Ingredient1, step.Ingredient2, step.Result)
-// 					}
-
-// 					fmt.Println("\nRecipe Tree:")
 // 					printTreeAsHeap(path.TreeRoot, "", true)
-
-// 					stats := calculateTreeStats(path.TreeRoot)
-// 					fmt.Printf("\nTree Statistics for crafting %s:\n", target)
-// 					fmt.Printf("Total Nodes: %d\n", stats.NodeCount)
-// 					fmt.Printf("Maximum Depth: %d\n", stats.MaxDepth)
-// 					fmt.Printf("Visited Nodes: %d\n", visitCount)
 // 				}
+// 				stats := calculateTreeStats(recipePaths[0].TreeRoot)
+// 				fmt.Printf("\nTree Statistics for crafting %s:\n", target)
+// 				fmt.Printf("Total Nodes: %d\n", stats.NodeCount)
+// 				fmt.Printf("Maximum Depth: %d\n", stats.MaxDepth)
+// 				fmt.Printf("Visited Nodes: %d\n", visitCount)
+// 			} else {
+// 				fmt.Printf("No recipes found for %s using BFS\n", target)
 // 			}
 // 		} else {
 // 			fmt.Printf("Finding up to %d recipes using DFS...\n", maxRecipes)
-// 			recipePaths, visitCount := DFS(target, graph, maxRecipes)
+// 			recipePaths, visitCount := DFS(target, graph, tiers, maxRecipes)
 // 			if len(recipePaths) > 0 {
 // 				fmt.Printf("\nFound %d recipes for %s using DFS:\n", len(recipePaths), target)
 // 				for _, path := range recipePaths {
-// 					fmt.Println("\nRecipe Path:")
-// 					for i, step := range path.Steps {
-// 						fmt.Printf("%d. Combine %s + %s = %s\n", i+1, step.Ingredient1, step.Ingredient2, step.Result)
-// 					}
-
-// 					fmt.Println("\nRecipe Tree:")
 // 					printTreeAsHeap(path.TreeRoot, "", true)
-
-// 					stats := calculateTreeStats(path.TreeRoot)
-// 					fmt.Printf("\nTree Statistics for crafting %s:\n", target)
-// 					fmt.Printf("Total Nodes: %d\n", stats.NodeCount)
-// 					fmt.Printf("Maximum Depth: %d\n", stats.MaxDepth)
-// 					fmt.Printf("Visited Nodes: %d\n", visitCount)
 // 				}
+// 				stats := calculateTreeStats(recipePaths[0].TreeRoot)
+// 				fmt.Printf("\nTree Statistics for crafting %s:\n", target)
+// 				fmt.Printf("Total Nodes: %d\n", stats.NodeCount)
+// 				fmt.Printf("Maximum Depth: %d\n", stats.MaxDepth)
+// 				fmt.Printf("Visited Nodes: %d\n", visitCount)
+// 			} else {
+// 				fmt.Printf("No recipes found for %s using DFS\n", target)
 // 			}
 // 		}
 // 	}
-// 	endTime := time.Now()
-// 	elapsedTime := endTime.Sub(startTime)
-// 	fmt.Printf("\nElapsed Time: %s\n", elapsedTime)
+// 	elapsedTime := time.Since(startTime)
+// 	fmt.Printf("Elapsed Time: %s\n", elapsedTime)
 // }
