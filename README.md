@@ -1,5 +1,17 @@
 # Tubes 2 Strategi Algortima
 
+## Penjelasan Singkat
+
+### Algoritma BFS
+
+- Algoritma BFS menggunakan pendekatan Bottom Up dimaana, penelusuran dimulai dari elemen elemen dasar hingga menemukan elemen elemen target.
+- Memanfaatkan multithreading untuk meningkatkan optimisasi penelusuran resep
+
+### Algortima DFS
+
+- Algoritma DFS menggunakan pendekatan Bottom Up dimana, penelusuran dimulai dari elemen elemen dasar hingga menemukan elemen elemen target.
+- Memanfaatkan multithreading untuk meningkatkan optimisasi penelusuran resep
+
 ## Prerequisites
 
 - [Node.js](https://nodejs.org) and [npm](https://npm.io/) (for local frontend development)
