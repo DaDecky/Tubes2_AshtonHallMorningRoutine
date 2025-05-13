@@ -12,7 +12,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { getLayoutedElements } from "@/utils/graphLayout";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 type RecipeNode = {
   name: string;
@@ -137,7 +137,6 @@ const generateGraphElementsAnimated = (
   let recipeCounter = 1;
 
   if (algorithm === "BFS") {
-    // BFS implementation
     const queue: { node: RecipeNode; parentId?: string; isRoot?: boolean }[] = [];
     queue.push({ node: data, isRoot: true });
 
@@ -145,7 +144,6 @@ const generateGraphElementsAnimated = (
       const current = queue.shift()!;
       const nodeId = `node${nodeIdCounter++}`;
 
-      // Add current node
       allNodes.push({
         id: nodeId,
         data: {
@@ -205,7 +203,6 @@ const generateGraphElementsAnimated = (
       }
     }
   } else {
-    // DFS implementation
     const stack: { node: RecipeNode; parentId?: string; isRoot?: boolean }[] = [];
     stack.push({ node: data, isRoot: true });
 
@@ -213,7 +210,6 @@ const generateGraphElementsAnimated = (
       const current = stack.pop()!;
       const nodeId = `node${nodeIdCounter++}`;
 
-      // Add current node
       allNodes.push({
         id: nodeId,
         data: {
@@ -234,13 +230,11 @@ const generateGraphElementsAnimated = (
       } as Node);
 
       if (current.node.recipes && current.node.recipes.length > 0) {
-        // For DFS, we need to process children in reverse order
         const recipes = [...current.node.recipes].reverse();
         
         for (const [left, right] of recipes) {
           const comboId = `combo${comboCounter++}`;
 
-          // Add combo node
           allNodes.push({
             id: comboId,
             data: { label: "" },
@@ -248,7 +242,6 @@ const generateGraphElementsAnimated = (
             ...nodeDefaults,
           } as Node);
 
-          // Add edges
           allEdges.push({
             id: `e-${comboId}-${nodeId}`,
             source: comboId,
@@ -258,13 +251,11 @@ const generateGraphElementsAnimated = (
             markerEnd: { type: MarkerType.ArrowClosed },
           });
 
-          // Process children (DFS)
           stack.push({ node: right, parentId: comboId });
           stack.push({ node: left, parentId: comboId });
         }
       }
 
-      // If this node has a parent, connect it
       if (current.parentId) {
         allEdges.push({
           id: `e-${nodeId}-${current.parentId}`,
@@ -288,6 +279,14 @@ export default function RecipeTree({
 }: recipeTreeProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
+  const speedRef = useRef(speed);
+
+
+  useEffect(() => {
+    console.log(speedRef.current)
+    console.log(speed)
+    speedRef.current = speed;
+  }, [speed]);
 
   useEffect(() => {
     if (!data) return;
@@ -297,7 +296,6 @@ export default function RecipeTree({
       algorithm
     );
 
-    // Clear previous nodes and edges
     setNodes([]);
     setEdges([]);
     
@@ -319,11 +317,11 @@ export default function RecipeTree({
           return prevNodes;
         }
       });
-    }, speed);
+    }, speedRef.current);
 
     
     return () => clearInterval(nodeInterval);
-  }, [data, direction, algorithm, speed]);
+  }, [data, direction, algorithm]);
 
   
   return (

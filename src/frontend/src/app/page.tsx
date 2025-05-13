@@ -103,7 +103,8 @@ export default function Page() {
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [recipeOptions, setRecipeOptions] = useState<RecipeOption[]>();
-  const [speed, setSpeed] = useState(200);
+  const [speed, setSpeed] = useState(50);
+  const [liveplay, setLiveplay] = useState(false);
 
   
   useEffect(() => {
@@ -271,6 +272,35 @@ export default function Page() {
               />
             </div>
 
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="liveplay"
+                checked={liveplay}
+                onCheckedChange={(checked) => {
+                  setLiveplay(checked === true)
+                  setSpeed(checked === true ? 500 : 50)
+                }}
+              />
+              <Label htmlFor="liveplay">
+                Liveplay
+              </Label>
+            </div>
+
+            {liveplay && (
+              <div className="space-y-2">
+                <Label htmlFor="speed">Speed</Label>
+                <Input
+                  id="speed"
+                  type="number"
+                  min="250"
+                  max="10000"
+                  value={speed}
+                  onChange={(e) => setSpeed(Number(e.target.value))}
+                  placeholder="Default: 500"
+                />
+              </div>
+            )}
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="w-full">
@@ -327,7 +357,7 @@ export default function Page() {
             </div>
           ) : state.data ? (
             <div className="h-[600px]">
-              <RecipeTree data={state.data} algorithm={algorithm as "BFS" | "DFS"} />
+              <RecipeTree data={state.data} algorithm={algorithm as "BFS" | "DFS"} speed={speed} />
             </div>
           ) : (
             <div className="text-center py-12 text-muted-foreground">
