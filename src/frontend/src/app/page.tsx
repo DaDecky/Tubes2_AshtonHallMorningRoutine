@@ -111,7 +111,7 @@ export default function Page() {
     
     const fetchRecipeOptions = async () => {
       try {
-        const base_url = process.env.BACKEND_URL || "http://localhost:8081";
+        const base_url = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8081";
         const response = await fetch(base_url + "/elements", );
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -143,7 +143,7 @@ export default function Page() {
     dispatch({ type: "FETCH_START" });
 
     try {
-      const base_url = process.env.BACKEND_URL || "http://localhost:8081";
+      const base_url = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8081";
       const url = base_url + `/search?target=${encodeURIComponent(target)}&algo=${algorithm}&max=${maxRecipes}`;
 
       const response = await fetch(url);
