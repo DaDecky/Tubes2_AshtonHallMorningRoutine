@@ -99,7 +99,6 @@ export default function Page() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [target, setTarget] = useState<string>("");
   const [algorithm, setAlgorithm] = useState("BFS");
-  const [shortestPath, setShortestPath] = useState(false);
   const [maxRecipes, setMaxRecipes] = useState(1);
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -133,7 +132,6 @@ export default function Page() {
   const fetchData = async (
     target: string,
     algorithm: string,
-    shortest: boolean
   ) => {
     if (!target) {
       dispatch({ type: "FORM_ERROR", error: "Please select a recipe" });
@@ -144,13 +142,7 @@ export default function Page() {
 
     try {
       const base_url = process.env.BACKEND_URL || "http://localhost:8081";
-      const url = base_url + (shortest
-        ? `/search?target=${encodeURIComponent(
-            target
-          )}&algo=${algorithm}&shortest=true`
-        : `/search?target=${encodeURIComponent(
-            target
-          )}&algo=${algorithm}&max=${maxRecipes}`);
+      const url = base_url + `/search?target=${encodeURIComponent(target)}&algo=${algorithm}&max=${maxRecipes}`;
 
       const response = await fetch(url);
       if (!response.ok && (response.status != 400)) {
@@ -179,7 +171,7 @@ export default function Page() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchData(target, algorithm, shortestPath);
+    fetchData(target, algorithm);
   };
 
   const targetRecipe = recipeOptions?.find(
@@ -265,31 +257,18 @@ export default function Page() {
               </select>
             </div>
 
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="shortestPath"
-                checked={shortestPath}
-                onCheckedChange={(checked) => setShortestPath(checked === true)}
+            <div className="space-y-2">
+              <Label htmlFor="maxRecipes">Maximum Recipes</Label>
+              <Input
+                id="maxRecipes"
+                type="number"
+                min="1"
+                max="50"
+                value={maxRecipes}
+                onChange={(e) => setMaxRecipes(Number(e.target.value))}
+                placeholder="Default: 10"
               />
-              <Label htmlFor="shortestPath">
-                Find shortest path only (1 recipe)
-              </Label>
             </div>
-
-            {!shortestPath && (
-              <div className="space-y-2">
-                <Label htmlFor="maxRecipes">Maximum Recipes</Label>
-                <Input
-                  id="maxRecipes"
-                  type="number"
-                  min="1"
-                  max="50"
-                  value={maxRecipes}
-                  onChange={(e) => setMaxRecipes(Number(e.target.value))}
-                  placeholder="Default: 10"
-                />
-              </div>
-            )}
 
             <Tooltip>
               <TooltipTrigger asChild>
@@ -320,12 +299,8 @@ export default function Page() {
                 Found {state.recipeFound} recipes in {state.time}ms
               </p>
               <p>Visited {state.nodeCount} nodes</p>
-              <p>Using {algorithm} algorithm</p>
-              {shortestPath ? (
-                <p>Showing shortest path only</p>
-              ) : (
-                <p>Showing up to {maxRecipes} recipes</p>
-              )}
+              <p>Using {algorithm} algorithm</p>        
+              <p>Showing up to {maxRecipes} recipes</p>
             </div>
           )}
         </CardContent>
@@ -343,7 +318,7 @@ export default function Page() {
                 <p key={i}>{error}</p>
               ))}
               <Button
-                onClick={() => fetchData(target, algorithm, shortestPath)}
+                onClick={() => fetchData(target, algorithm)}
                 variant="outline"
               >
                 Retry
