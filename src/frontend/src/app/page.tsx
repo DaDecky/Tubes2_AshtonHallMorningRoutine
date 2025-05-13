@@ -103,6 +103,7 @@ export default function Page() {
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [recipeOptions, setRecipeOptions] = useState<RecipeOption[]>();
+  const [speed, setSpeed] = useState(200);
 
   
   useEffect(() => {
@@ -326,7 +327,7 @@ export default function Page() {
             </div>
           ) : state.data ? (
             <div className="h-[600px]">
-              <RecipeTree data={state.data} />
+              <RecipeTree data={state.data} algorithm={algorithm as "BFS" | "DFS"} />
             </div>
           ) : (
             <div className="text-center py-12 text-muted-foreground">
