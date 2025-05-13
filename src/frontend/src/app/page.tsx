@@ -103,7 +103,7 @@ export default function Page() {
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [recipeOptions, setRecipeOptions] = useState<RecipeOption[]>();
-  const [speed, setSpeed] = useState(50);
+  const [speed, setSpeed] = useState(500);
   const [liveplay, setLiveplay] = useState(false);
 
   
@@ -278,7 +278,6 @@ export default function Page() {
                 checked={liveplay}
                 onCheckedChange={(checked) => {
                   setLiveplay(checked === true)
-                  setSpeed(checked === true ? 500 : 50)
                 }}
               />
               <Label htmlFor="liveplay">
@@ -292,7 +291,7 @@ export default function Page() {
                 <Input
                   id="speed"
                   type="number"
-                  min="250"
+                  min="250  "
                   max="10000"
                   value={speed}
                   onChange={(e) => setSpeed(Number(e.target.value))}
@@ -357,7 +356,7 @@ export default function Page() {
             </div>
           ) : state.data ? (
             <div className="h-[600px]">
-              <RecipeTree data={state.data} algorithm={algorithm as "BFS" | "DFS"} speed={speed} />
+              <RecipeTree data={state.data} algorithm={algorithm as "BFS" | "DFS"} liveplay={liveplay} speed={speed} />
             </div>
           ) : (
             <div className="text-center py-12 text-muted-foreground">

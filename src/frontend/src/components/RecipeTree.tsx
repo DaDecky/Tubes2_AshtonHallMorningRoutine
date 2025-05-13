@@ -24,7 +24,8 @@ type recipeTreeProps = {
   direction?: "TB" | "LR";
   useImage?: boolean;
   algorithm?: "BFS" | "DFS";
-  speed?: number
+  liveplay?: boolean;
+  speed?: number;
 };
 
 const nodeDefaults = {
@@ -275,18 +276,19 @@ export default function RecipeTree({
   data,
   direction = "TB",
   algorithm = "BFS",
+  liveplay = false,
   speed = 500,
 }: recipeTreeProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const speedRef = useRef(speed);
+  const liveplayRef = useRef(liveplay);
 
 
   useEffect(() => {
-    console.log(speedRef.current)
-    console.log(speed)
     speedRef.current = speed;
-  }, [speed]);
+    liveplayRef.current = liveplay
+  }, [speed, liveplay]);
 
   useEffect(() => {
     if (!data) return;
@@ -299,28 +301,34 @@ export default function RecipeTree({
     setNodes([]);
     setEdges([]);
     
-    const nodeInterval = setInterval(() => {
-      setNodes((prevNodes) => {
-        if (allNodes.length > prevNodes.length) {
-          const newNodes = [...prevNodes, allNodes[prevNodes.length]];
-
-          setEdges((prevEdges) => {
-            if (allEdges.length > prevEdges.length) {
-              return [...prevEdges, allEdges[prevEdges.length]];
-            }
-            return prevEdges;
-          });
-
-          return newNodes;
-        } else {
-          clearInterval(nodeInterval);
-          return prevNodes;
-        }
-      });
-    }, speedRef.current);
+    if (liveplayRef.current) {
+      const nodeInterval = setInterval(() => {
+        setNodes((prevNodes) => {
+          if (allNodes.length > prevNodes.length) {
+            const newNodes = [...prevNodes, allNodes[prevNodes.length]];
+  
+            setEdges((prevEdges) => {
+              if (allEdges.length > prevEdges.length) {
+                return [...prevEdges, allEdges[prevEdges.length]];
+              }
+              return prevEdges;
+            });
+  
+            return newNodes;
+          } else {
+            clearInterval(nodeInterval);
+            return prevNodes;
+          }
+        });
+      }, speedRef.current);
+      return () => clearInterval(nodeInterval);
+    }
+    else {
+      setNodes(allNodes);
+      setEdges(allEdges);
+    }
 
     
-    return () => clearInterval(nodeInterval);
   }, [data, direction, algorithm]);
 
   
