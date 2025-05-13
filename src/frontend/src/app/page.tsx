@@ -159,7 +159,7 @@ export default function Page() {
           errors: jsonData.errors || [],
           time: jsonData.time,
           nodeCount: jsonData.nodeCount,
-          recipeFound: jsonData.recipefound,
+          recipeFound: jsonData.recipeFound,
         },
       });
     } catch (error) {
